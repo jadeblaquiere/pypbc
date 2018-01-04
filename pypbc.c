@@ -148,7 +148,8 @@ PyObject *Parameters_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
 
 // Parameters(param_string=str, n=long, qbits=long, rbits=long, short=True/False) -> Parameters
 int Parameters_init(Parameters *self, PyObject *args, PyObject *kwargs) {
-	char *kwds[] = {"param_string", "n", "qbits", "rbits", "short", NULL};
+	char *kwds[] = {"param_string", "n", "qbits", "rbits", "short",
+	                "q", "r", "h", "exp2", "exp1", "sign1", "sign0", NULL};
 	// if the parameters are given as a string
 	char *param_string = NULL;
 	size_t s_len = 0;
@@ -159,7 +160,17 @@ int Parameters_init(Parameters *self, PyObject *args, PyObject *kwargs) {
 	int rbits = 0;
 	// for the above
 	PyObject *is_short = NULL;
-	if (!PyArg_ParseTupleAndKeywords(args, kwargs, "|s#OiiO", kwds, &param_string, &s_len, &n, &qbits, &rbits, &is_short)) {
+	// Alternate (explicit) initialization of Type A
+	PyObject *q = NULL;
+	PyObject *r = NULL;
+	PyObject *h = NULL;
+	int exp2 = 0;
+	int exp1 = 0;
+	int sign1 = 0;
+	int sign0 = 0;
+	if (!PyArg_ParseTupleAndKeywords(args, kwargs, "|s#OiiOOOOiiii", kwds,
+		&param_string, &s_len, &n, &qbits, &rbits, &is_short, &q, &r, &h,
+		&exp2, &exp1, &sign1, &sign0)) {
 		PyErr_SetString(PyExc_TypeError, "could not parse arguments");
 		return -1;
 	}
@@ -172,6 +183,7 @@ int Parameters_init(Parameters *self, PyObject *args, PyObject *kwargs) {
 	int s_type = 0;
 	int n_type = 0;
 	int qr_type = 0;
+	int qrhes_type = 0;
 	// if just the string is provided, we're s_type
 	if (param_string && !n && !qbits && !rbits && !is_short) {
 		s_type = 1;
@@ -181,6 +193,9 @@ int Parameters_init(Parameters *self, PyObject *args, PyObject *kwargs) {
 	// if qbits and rbits are provided, and n is not, we're qr_type
 	} else if (qbits && rbits && !n) {
 		qr_type = 1;
+	// explicit initialization of type A
+	} else if (q && r && h && exp2 && exp1 && sign0 && sign1) {
+		qrhes_type = 1;
 	// poor bastard, they tried
 	} else {
 		PyErr_SetString(PyExc_ValueError, "Impossible to determine desired curve type, please provide s or n or (qbits and rbits).");
@@ -225,6 +240,11 @@ int Parameters_init(Parameters *self, PyObject *args, PyObject *kwargs) {
 		}
 	}
 	
+	if (qrhes_type) {
+		PyErr_SetString(PyExc_ValueError, "Impossible to determine desired curve type, setting q, r, h, exp2, exp1, sign1, sign0 not implemented.");
+		return -1;
+	}
+
 	// you're ready!
 	self->ready = 1;
 	// all's clear
@@ -601,7 +621,7 @@ int Element_init(PyObject *py_self, PyObject *args, PyObject *kwargs) {
 					self->ready = 1;
 					// we're clear
 					return 0;
-				printf("parsed\n");
+				//printf("parsed\n");
 				} else if (strncmp(str, "00", 2) == 0) {
 					// assume EC Point at infinity
 					element_set0(self->pbc_element);
@@ -867,7 +887,7 @@ PyObject *Element_str(PyObject *element) {
 			} else {
 				if (PBC_EC_Compressed) {
 					size = element_to_bytes_compressed(&string[1], py_ele->pbc_element);
-					string[0] = 0x02 | string[size];
+					string[0] = 0x02 | (string[size] & 0x01) ;
 					string[size] = 0;
 				} else {
 					if (dim != 2) {
